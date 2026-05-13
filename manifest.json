@@ -4,7 +4,7 @@
   "display_name": "FEC Filing MCP Server",
   "version": "2.1.0",
   "description": "Search FEC committees and retrieve campaign finance filings",
-  "long_description": "An MCP server providing secure access to the FEC API for searching committees and retrieving campaign finance filings. The API key is stored securely in your system keychain and never exposed to the model.",
+  "long_description": "An MCP server providing secure access to the FEC API for searching committees and retrieving campaign finance filings. The API key is configured during installation and stored securely in your system keychain/credential manager.",
   "icon": "icon.png",
   "author": {
     "name": "Matt Hodges"
@@ -54,9 +54,9 @@
     "fec_api_key": {
       "type": "string",
       "title": "FEC API Key",
-      "description": "Your API key from api.open.fec.gov/developers (optional - required for committee search and detailed filing data)",
+      "description": "Your API key from api.open.fec.gov/developers (required for committee search and filing data)",
       "sensitive": true,
-      "required": false
+      "required": true
     }
   },
   "keywords": [

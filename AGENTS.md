@@ -7,11 +7,11 @@ This repo contains a Claude Code plugin for analyzing FEC (Federal Election Comm
 - **Plugin name**: `fecfile`
 - **Skill name**: `fecfile`
 - **MCP server**: `fec-api` (provides `search_committees` and `get_filings` tools)
-- **Dependencies**: `fecfile`, `mcp`, `httpx`, `keyring` - managed via inline script metadata (PEP 723), auto-installed by `uv run`
+- **Dependencies**: `fecfile`, `mcp`, `httpx` - managed via inline script metadata (PEP 723), auto-installed by `uv run`
 - **Data sources**:
   - Public: `docquery.fec.gov`
   - Authenticated: `api.open.fec.gov` (via MCP server)
-- **Python**: Requires 3.9+
+- **Python**: Requires 3.10+
 
 ## Project Structure
 
@@ -44,9 +44,10 @@ agent-fecfile/
 - `uv run skills/fecfile/scripts/fetch_filing.py <FILING_ID> --stream`: JSONL streaming
 
 **MCP Server:**
-- The MCP server is automatically started by Claude Code when loaded as a plugin
-- For other runtimes, configure MCP to run: `uv run mcp-server/server.py`
-- The server loads the FEC API key from keyring on first tool use
+- In v2.1.0+, the MCP server is distributed via MCPB (separate from plugin)
+- The server reads the FEC API key from the `FEC_API_KEY` environment variable
+- MCPB's `user_config` handles keychain storage and env var injection
+- For manual testing: `FEC_API_KEY=your-key uv run mcp-server/server.py`
 
 ## Coding Style & Naming Conventions
 
@@ -111,11 +112,12 @@ The script extracts the version from plugin.json, creates the version tag, updat
 ### MCP Server
 
 The MCP server (`mcp-server/server.py`) provides secure API access:
-- Loads FEC API key from system keyring **on first tool use** (lazy loading)
+- Reads FEC API key from `FEC_API_KEY` environment variable **on first tool use** (lazy loading)
+- MCPB's `user_config` handles keychain storage and injects the key via env var
 - Key held in memory, never exposed to the model
 - Exposes `search_committees` and `get_filings` as MCP tools
 - Uses stdio transport for communication with Claude Code
-- Works with any MCP-compatible runtime (Claude Code, Codex, etc.)
+- Works with any MCP-compatible runtime (Claude Code, Claude Desktop, etc.)
 
 ### Agent Skill
 

@@ -84,38 +84,21 @@ The MCP server provides two tools:
 > [!NOTE]
 > The MCPB bundle includes only the MCP server. For the full workflow with Agent Skill, form references, and filing analysis scripts, use the Claude Code plugin instead.
 
-### Other Compatible Runtimes (Codex, etc.)
+### Other MCP-Compatible Runtimes
 
-For agent runtimes that support Agent Skills and MCP but not Claude Code plugins:
+For runtimes that support MCP but not Claude Code plugins or MCPB:
 
-1. **Clone the repository:**
-
-```bash
-git clone --branch latest git@github.com:hodgesmr/agent-fecfile.git ~/agent-fecfile
-```
-
-2. **Install the Agent Skill** by symlinking to your runtime's skills directory:
+The MCP server can be run manually with environment variable configuration:
 
 ```bash
-# Codex CLI Global install
-ln -sfn ~/agent-fecfile/skills/fecfile ~/.codex/skills/fecfile
+# Set your API key
+export FEC_API_KEY="your-api-key-here"
+
+# Run the server
+uv run mcp-server/server.py
 ```
 
-3. **Configure the MCP server** using your runtime's MCP configuration:
-
-```bash
-# Codex CLI
-codex mcp add fec-api -- uv run ~/agent-fecfile/mcp-server/server.py
-```
-
-> [!IMPORTANT]
-> The MCP server loads the FEC API key from the system keyring on first tool use. You should expect to see a system prompt to authorize Python's access to the key the first time you use `search_committees` or `get_filings`.
-
-**Updating:**
-
-```bash
-cd ~/agent-fecfile && git fetch --tags --force && git checkout latest
-```
+Configure your MCP client to connect to this stdio server. The API key must be provided via the `FEC_API_KEY` environment variable.
 
 ## Usage
 
