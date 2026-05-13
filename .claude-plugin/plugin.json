@@ -1,7 +1,7 @@
 {
   "name": "fecfile",
-  "description": "Analyze FEC (Federal Election Commission) campaign finance filings. Use when working with FEC filing IDs, campaign finance data, contributions, disbursements, or political committee financial reports. Provides the proper workflow for the fec-api MCP tools (search_committees, get_filings).",
-  "version": "2.0.2",
+  "description": "Analyze FEC (Federal Election Commission) campaign finance filings. Provides Agent Skill with workflow instructions, form references, and filing analysis scripts. Requires fecfile-mcp MCPB for MCP tools (search_committees, get_filings).",
+  "version": "2.1.0",
   "author": {
     "name": "Matt Hodges"
   },

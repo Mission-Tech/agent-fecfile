@@ -1,9 +1,3 @@
 {
-  "mcpServers": {
-    "fec-api": {
-      "command": "uv",
-      "args": ["run", "${CLAUDE_PLUGIN_ROOT}/mcp-server/server.py"],
-      "env": {}
-    }
-  }
+  "mcpServers": {}
 }

@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-05-13
+
+### Added
+
+- **MCPB distribution**: New `.mcpb` bundle for Claude Desktop users
+  - Provides MCP server (`search_committees`, `get_filings` tools)
+  - GUI-based API key setup during installation
+  - Stored securely in system keychain/credential manager
+  - Works in Claude Desktop without plugin system
+- **Icon**: Added 512×512 PNG icon for MCPB manifest
+- **Build script**: `scripts/build-mcpb.sh` for packaging MCPB bundles
+- **Dual distribution**: Plugin (skill + scripts) + MCPB (MCP server) work together
+
+### Changed
+
+- **BREAKING**: Plugin no longer bundles MCP server
+  - `.mcp.json` is now empty (MCP server moved to MCPB)
+  - Users must install MCPB separately for MCP tools
+  - Skill updated to document MCPB requirement
+- **MCP server**: Now reads API key from `FEC_API_KEY` environment variable
+  - Removed `keyring` dependency (simpler, cleaner)
+  - MCPB's `user_config` handles keychain storage
+  - Backward compatible via `.mcp.json` env configuration
+- **Python requirement**: Updated from 3.9+ to 3.10+ (matches MCP SDK)
+- **MCP SDK pinning**: Now pins to `>=1.27.0,<2` (protects against v2 breaking changes)
+- **Architecture**: Modular distribution model
+  - Plugin: Agent Skill + scripts (Claude Code)
+  - MCPB: MCP server (Claude Desktop + Claude Code)
+  - Both can be installed independently or together
+
+### Fixed
+
+- Corrected Python version requirement to match MCP SDK (was 3.9+, now 3.10+)
+- Added version pinning to prevent silent breakage when MCP v2 releases
+
 ## [2.0.2] - 2026-02-03
 
 ### Fixed

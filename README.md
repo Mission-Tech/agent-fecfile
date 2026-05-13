@@ -20,12 +20,19 @@ The plugin includes detailed field mappings for common form types and schedules,
 
 ## Requirements
 
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) or another MCP-compatible runtime (e.g., [Codex CLI](https://developers.openai.com/codex/cli/))
-- [uv](https://docs.astral.sh/uv/) (for running Python scripts)
-- Python 3.9+
-- An [FEC API key](https://api.open.fec.gov/developers/) (for committee/filing search)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) or [Claude Desktop](https://claude.ai/download) or another MCP-compatible runtime
+- [uv](https://docs.astral.sh/uv/) (for running Python scripts via the skill)
+- Python 3.10+
+- An [FEC API key](https://api.open.fec.gov/developers/) (for MCP committee/filing search tools)
 
 ## Installation
+
+**This project has two components** that can be installed separately:
+
+1. **Plugin** (Claude Code only): Agent Skill + filing analysis scripts
+2. **MCPB** (Claude Desktop + Claude Code): MCP server for committee search
+
+Most users will want both. Installation instructions for each are below.
 
 ### Claude Code Plugin (Recommended)
 
@@ -39,11 +46,17 @@ claude plugin marketplace add hodgesmr/agent-fecfile
 claude plugin install fecfile@agent-fecfile
 ```
 
-You may need to restart your Claude Code session to properly load the Agent Skill and MCP Server.
+You may need to restart your Claude Code session to properly load the Agent Skill.
 
-When installed:
-- The Agent Skill (`fecfile`) is automatically available
-- The MCP server starts automatically, providing `search_committees` and `get_filings` tools
+**What's included:**
+- ✅ Agent Skill (`fecfile`) with workflow instructions and form references
+- ✅ Filing analysis script (`fetch_filing.py`) for public API access
+- ⚠️ **MCP server NOT included** - Install separately via MCPB (see below)
+
+**To get the MCP tools** (`search_committees`, `get_filings`):
+1. Download the latest `fecfile-mcp-*.mcpb` from [releases](https://github.com/hodgesmr/agent-fecfile/releases)
+2. Double-click to install
+3. Enter your FEC API key when prompted
 
 **Updating:**
 

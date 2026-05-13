@@ -1,11 +1,11 @@
 ---
 name: fecfile
-description: Analyze FEC (Federal Election Commission) campaign finance filings. Use when working with FEC filing IDs, campaign finance data, contributions, disbursements, or political committee financial reports. Provides the proper workflow for the fec-api MCP tools (search_committees, get_filings).
-compatibility: Requires uv and access to the internet
+description: Analyze FEC (Federal Election Commission) campaign finance filings. Use when working with FEC filing IDs, campaign finance data, contributions, disbursements, or political committee financial reports. Provides the proper workflow for the fecfile-mcp MCP tools (search_committees, get_filings).
+compatibility: Requires uv, Python 3.10+, and fecfile-mcp MCPB installed
 license: MIT
 metadata:
   author: Matt Hodges
-  version: "2.0.2"
+  version: "2.1.0"
 ---
 
 # FEC Filing Analysis
@@ -15,7 +15,10 @@ This skill enables analysis of Federal Election Commission campaign finance fili
 ## Requirements
 
 - [uv](https://docs.astral.sh/uv/) must be installed
-- Python 3.9+
+- Python 3.10+
+- **fecfile-mcp MCPB** must be installed for MCP tools (`search_committees`, `get_filings`)
+  - Download from: https://github.com/hodgesmr/agent-fecfile/releases
+  - Install by double-clicking the `.mcpb` file
 
 Dependencies are automatically installed when running scripts with `uv run`.
 
@@ -190,12 +193,14 @@ When the user asks about a candidate or committee's filings without providing a 
 
 ### MCP Tools
 
-The `fec-api` MCP server provides two tools:
+The `fecfile-mcp` MCP server (installed via MCPB) provides two tools:
 
 - **`search_committees`**: Search for committees by name → returns committee IDs
 - **`get_filings`**: Get filings for a committee ID → returns filing IDs and metadata
 
-The MCP server loads the FEC API key from the system keyring on first tool use, keeping it secure and hidden from the conversation. The API key is never visible to the model.
+The MCP server loads the FEC API key from your system keychain (configured during MCPB installation). The API key is never visible to the model.
+
+**Note**: If the MCP tools are not available, the user needs to install the fecfile-mcp MCPB bundle from https://github.com/hodgesmr/agent-fecfile/releases
 
 ### API Key Security
 
