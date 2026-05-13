@@ -35,11 +35,11 @@ cp README.md "$STAGING/"
 cp LICENSE "$STAGING/"
 cp CHANGELOG.md "$STAGING/"
 
-# Create plugin archive (tar.gz with .plugin extension)
+# Create plugin archive (zip with .plugin extension)
 echo "Creating plugin archive..."
 FULL_OUTPUT_PATH="$(pwd)/$OUTPUT_FILE"
 cd "$STAGING"
-tar -czf "$FULL_OUTPUT_PATH" .
+zip -r -q "$FULL_OUTPUT_PATH" .
 cd - > /dev/null
 
 echo ""

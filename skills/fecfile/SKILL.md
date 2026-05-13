@@ -200,7 +200,11 @@ The `fecfile-mcp` MCP server (installed via MCPB) provides two tools:
 
 The MCP server loads the FEC API key from your system keychain (configured during MCPB installation). The API key is never visible to the model.
 
-**Note**: If the MCP tools are not available, the user needs to install the fecfile-mcp MCPB bundle from https://github.com/hodgesmr/agent-fecfile/releases
+**IMPORTANT — MCP tools are mandatory for committee/filing lookup. Do NOT use `web_fetch`, `bash`, or any other tool to call the FEC API directly (e.g., `api.open.fec.gov`). Even if those endpoints are reachable, bypassing the MCP defeats API key management and rate-limit controls. Always use `search_committees` and `get_filings` via the MCP.**
+
+**If the MCP tools return a 403 or auth error:** The API key is missing or misconfigured. Do not fall back to direct API calls. Instead, inform the user that the FEC API key needs to be set up, and ask them to restart the app after configuring it. The key is stored in the macOS keychain and was set during MCPB installation.
+
+**If the MCP tools are not available at all:** The user needs to install the fecfile-mcp MCPB bundle from https://github.com/hodgesmr/agent-fecfile/releases. Do not attempt to work around this with direct API calls.
 
 ### API Key Security
 
@@ -369,9 +373,11 @@ Note: `-receipt_date` can have ties when multiple filings arrive the same day. `
 
 ## Finding Filing IDs (Manual)
 
-If the FEC API is not set up, filing IDs can be found via:
+If the MCP tools are unavailable or not yet configured, direct the user to find filing IDs themselves via their browser — do not attempt to fetch these on their behalf:
 1. **FEC Website**: Visit [fec.gov](https://www.fec.gov) and search for a committee
 2. **Direct URLs**: Filing IDs appear in URLs like `https://docquery.fec.gov/dcdev/posted/1690664.fec`
+
+Once the user provides a filing ID, you can proceed with `fetch_filing.py` as normal. Do not use `web_fetch` or `bash` to call the FEC API as a substitute for the MCP tools.
 
 ## Response Style
 
