@@ -34,6 +34,7 @@ from mcp.types import Tool, TextContent
 
 # Constants
 FEC_API_BASE = "https://api.open.fec.gov/v1"
+SERVER_VERSION = "2.1.1"
 
 
 def sanitize_api_key(text: str) -> str:
@@ -72,6 +73,18 @@ class FECAPIServer:
         @self.server.list_tools()
         async def list_tools():
             return [
+                Tool(
+                    name="get_version",
+                    description=(
+                        "Returns the running MCP server version. Use this to confirm "
+                        "which version of the fecfile-mcp server is active."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                ),
                 Tool(
                     name="search_committees",
                     description=(
@@ -147,7 +160,9 @@ class FECAPIServer:
 
         @self.server.call_tool()
         async def call_tool(name: str, arguments: dict):
-            if name == "search_committees":
+            if name == "get_version":
+                return [TextContent(type="text", text=SERVER_VERSION)]
+            elif name == "search_committees":
                 return await self._search_committees(arguments)
             elif name == "get_filings":
                 return await self._get_filings(arguments)
@@ -202,11 +217,34 @@ class FECAPIServer:
                 )
             ]
 
-        except httpx.HTTPError as e:
+        except httpx.HTTPStatusError as e:
+            body_snippet = e.response.text[:300].strip() if e.response else ""
             return [
                 TextContent(
                     type="text",
-                    text=f"API error: {sanitize_api_key(str(e))}",
+                    text=(
+                        f"HTTP {e.response.status_code} error from FEC API: "
+                        f"{sanitize_api_key(str(e))}"
+                        + (f"\nResponse body: {body_snippet}" if body_snippet else "")
+                    ),
+                )
+            ]
+        except httpx.HTTPError as e:
+            cause = repr(e.__cause__) if e.__cause__ else ""
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        f"Connection error ({type(e).__name__}): {sanitize_api_key(str(e))}"
+                        + (f"\nCaused by: {cause}" if cause else "")
+                    ),
+                )
+            ]
+        except Exception as e:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Unexpected error ({type(e).__name__}): {sanitize_api_key(str(e))}",
                 )
             ]
 
@@ -288,11 +326,34 @@ class FECAPIServer:
                 )
             ]
 
-        except httpx.HTTPError as e:
+        except httpx.HTTPStatusError as e:
+            body_snippet = e.response.text[:300].strip() if e.response else ""
             return [
                 TextContent(
                     type="text",
-                    text=f"API error: {sanitize_api_key(str(e))}",
+                    text=(
+                        f"HTTP {e.response.status_code} error from FEC API: "
+                        f"{sanitize_api_key(str(e))}"
+                        + (f"\nResponse body: {body_snippet}" if body_snippet else "")
+                    ),
+                )
+            ]
+        except httpx.HTTPError as e:
+            cause = repr(e.__cause__) if e.__cause__ else ""
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        f"Connection error ({type(e).__name__}): {sanitize_api_key(str(e))}"
+                        + (f"\nCaused by: {cause}" if cause else "")
+                    ),
+                )
+            ]
+        except Exception as e:
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Unexpected error ({type(e).__name__}): {sanitize_api_key(str(e))}",
                 )
             ]
 
