@@ -1,0 +1,56 @@
+# Python build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+
+# Virtual environments (REQUIRED exclusion for uv type)
+.venv/
+venv/
+env/
+server/lib/
+server/venv/
+
+# Python/UV files
+.python-version
+uv.lock
+
+# OS files
+.DS_Store
+Thumbs.db
+._.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Testing/CI
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# Plugin-specific (keep plugin working in parallel)
+.claude-plugin/
+.mcp.json
+CLAUDE.md
+
+# Skills (not part of MCPB spec - desktop app won't load them)
+skills/
+
+# Dev/Release scripts
+release.sh
+AGENTS.md
+
+# Source image (icon.png is included)
+agent-fecfile.jpeg

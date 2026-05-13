@@ -55,6 +55,22 @@ claude plugin marketplace update agent-fecfile
 claude plugin update fecfile@agent-fecfile
 ```
 
+### Claude Desktop (MCPB)
+
+For Claude Desktop users who only need the MCP server tools (without the Agent Skill):
+
+1. **Download the `.mcpb` file** from the [latest release](https://github.com/hodgesmr/agent-fecfile/releases)
+2. **Double-click** the `.mcpb` file to install
+3. **Enter your FEC API key** when prompted (get one free at [api.open.fec.gov/developers](https://api.open.fec.gov/developers))
+4. The key is stored securely in your system keychain/credential manager
+
+The MCP server provides two tools:
+- `search_committees` - Search for FEC committees by name
+- `get_filings` - Get filings for a specific committee
+
+> [!NOTE]
+> The MCPB bundle includes only the MCP server. For the full workflow with Agent Skill, form references, and filing analysis scripts, use the Claude Code plugin instead.
+
 ### Other Compatible Runtimes (Codex, etc.)
 
 For agent runtimes that support Agent Skills and MCP but not Claude Code plugins:

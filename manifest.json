@@ -1,0 +1,72 @@
+{
+  "manifest_version": "0.4",
+  "name": "fecfile-mcp",
+  "display_name": "FEC Filing MCP Server",
+  "version": "2.1.0",
+  "description": "Search FEC committees and retrieve campaign finance filings",
+  "long_description": "An MCP server providing secure access to the FEC API for searching committees and retrieving campaign finance filings. The API key is stored securely in your system keychain and never exposed to the model.",
+  "icon": "icon.png",
+  "author": {
+    "name": "Matt Hodges"
+  },
+  "homepage": "https://github.com/hodgesmr/agent-fecfile",
+  "documentation": "https://github.com/hodgesmr/agent-fecfile#readme",
+  "support": "https://github.com/hodgesmr/agent-fecfile/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hodgesmr/agent-fecfile.git"
+  },
+  "server": {
+    "type": "uv",
+    "entry_point": "mcp-server/server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "python",
+        "${__dirname}/mcp-server/server.py"
+      ],
+      "env": {
+        "FEC_API_KEY": "${user_config.fec_api_key}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "search_committees",
+      "description": "Search for FEC committees by name. Returns committee IDs that can be used with get_filings."
+    },
+    {
+      "name": "get_filings",
+      "description": "Get FEC filings for a committee. Returns filing IDs, dates, and financial summaries. Filter by cycle, form type, or report type."
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "python": ">=3.10"
+    }
+  },
+  "user_config": {
+    "fec_api_key": {
+      "type": "string",
+      "title": "FEC API Key",
+      "description": "Your API key from api.open.fec.gov/developers (optional - required for committee search and detailed filing data)",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "keywords": [
+    "fec",
+    "campaign-finance",
+    "elections",
+    "political-contributions",
+    "federal-election-commission"
+  ],
+  "privacy_policies": [
+    "https://www.fec.gov/about/privacy-and-security-policy/"
+  ]
+}
