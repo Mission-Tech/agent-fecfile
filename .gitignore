@@ -9,5 +9,10 @@ venv/
 # uv
 uv.lock
 
+# Build artifacts
+dist/
+*.plugin
+*.mcpb
+
 # OS
 .DS_Store
