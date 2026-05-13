@@ -1,42 +1,39 @@
 #!/usr/bin/env python3
 # /// script
-# requires-python = ">=3.9"
+# requires-python = ">=3.10"
 # dependencies = [
-#     "mcp>=1.26.0",
+#     "mcp>=1.27.0,<2",
 #     "httpx>=0.28.0",
-#     "keyring>=25.7.0",
 # ]
 # ///
 """
 FEC API MCP Server
 
 An MCP server that provides secure access to the FEC API. The API key is loaded
-lazily from the system keyring on first tool use and cached, preventing the LLM
-from ever seeing or accessing the credential. This lazy loading avoids keychain
-prompts at startup when the user isn't doing FEC work.
+from the FEC_API_KEY environment variable on first tool use and cached,
+preventing the LLM from ever seeing or accessing the credential. This lazy
+loading ensures the server starts quickly even when the user isn't doing FEC work.
 
 Tools:
     - search_committees: Search for FEC committees by name
     - get_filings: Get filings for a specific committee
 
-The server uses stdio transport for communication with Claude Code.
+The server uses stdio transport for communication with MCP clients.
 """
 
 import json
+import os
 import re
 import sys
 from typing import Optional
 
 import httpx
-import keyring
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 # Constants
 FEC_API_BASE = "https://api.open.fec.gov/v1"
-KEYRING_SERVICE = "fec-api"
-KEYRING_USERNAME = "api-key"
 
 
 def sanitize_api_key(text: str) -> str:
@@ -62,18 +59,12 @@ class FECAPIServer:
 
     def _load_api_key(self) -> Optional[str]:
         """
-        Load the FEC API key from the system keyring.
+        Load the FEC API key from the FEC_API_KEY environment variable.
 
-        Returns None if the key is not found or cannot be retrieved,
-        allowing the server to start without a key (for public-only access).
+        Returns None if the key is not set, allowing the server to start
+        without a key (for public-only access via other means).
         """
-        try:
-            api_key = keyring.get_password(KEYRING_SERVICE, KEYRING_USERNAME)
-            if api_key:
-                return api_key
-        except Exception:
-            pass
-        return None
+        return os.getenv("FEC_API_KEY")
 
     def _setup_handlers(self):
         """Configure MCP server handlers."""
@@ -86,9 +77,8 @@ class FECAPIServer:
                     description=(
                         "Search for FEC committees by name. Returns committee IDs "
                         "that can be used with get_filings. Requires FEC API key "
-                        "to be configured in system keyring. For detailed filing "
-                        "analysis, invoke the fecfile skill which provides the "
-                        "proper uv-based workflow."
+                        "to be configured. For detailed filing analysis, invoke the "
+                        "fecfile skill which provides the proper uv-based workflow."
                     ),
                     inputSchema={
                         "type": "object",
@@ -171,9 +161,9 @@ class FECAPIServer:
                 TextContent(
                     type="text",
                     text=(
-                        "FEC API key not configured. Please add your API key to the "
-                        "system keyring with service 'fec-api' and username 'api-key'. "
-                        "See README for setup instructions."
+                        "FEC API key not configured. Please set your FEC_API_KEY "
+                        "in the server configuration. Get a free API key at "
+                        "https://api.open.fec.gov/developers"
                     ),
                 )
             ]
@@ -227,9 +217,9 @@ class FECAPIServer:
                 TextContent(
                     type="text",
                     text=(
-                        "FEC API key not configured. Please add your API key to the "
-                        "system keyring with service 'fec-api' and username 'api-key'. "
-                        "See README for setup instructions."
+                        "FEC API key not configured. Please set your FEC_API_KEY "
+                        "in the server configuration. Get a free API key at "
+                        "https://api.open.fec.gov/developers"
                     ),
                 )
             ]
