@@ -68,6 +68,20 @@ claude plugin marketplace update agent-fecfile
 claude plugin update fecfile@agent-fecfile
 ```
 
+### Claude desktop app / Cowork (Customize menu, no terminal)
+
+In the Claude desktop app (Cowork) you add the marketplace and install the plugin through the **Customize** menu instead of the CLI. Anthropic's [Use plugins in Claude](https://support.claude.com/en/articles/13837440-use-plugins-in-claude) help article is the full walkthrough; the short version:
+
+1. Open **Customize** in the left sidebar, then the **Plugins** tab.
+2. Under **Personal plugins**, click **+** → **Add marketplace** → **Add from a repository**.
+3. Paste this repo's Git URL — `https://github.com/hodgesmr/agent-fecfile` — and add it.
+4. Click **Browse plugins**, find **fecfile**, and click **Install**.
+
+The `fecfile` skill is then available in chat and Cowork tasks — type `/` or click **+** to use it.
+
+> [!IMPORTANT]
+> This installs the **skill** only. The committee/filing search tools (`search_committees`, `get_filings`) come from the **MCPB**, which installs separately — see [Claude Desktop (MCPB)](#claude-desktop-mcpb). Without the MCPB the skill can still analyze a filing you give it by ID, but can't look committees up by name.
+
 ### Claude Desktop (MCPB)
 
 For Claude Desktop users who only need the MCP server tools (without the Agent Skill):
