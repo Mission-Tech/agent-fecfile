@@ -33,6 +33,9 @@ Thumbs.db
 .gitignore
 .gitattributes
 
+# CI workflows (repo tooling, not part of the server bundle)
+.github/
+
 # Testing/CI
 .pytest_cache/
 .coverage
@@ -48,7 +51,8 @@ CLAUDE.md
 # Skills (not part of MCPB spec - desktop app won't load them)
 skills/
 
-# Dev/Release scripts
+# Dev/Release scripts (build tooling, not needed at runtime)
+scripts/
 release.sh
 AGENTS.md
 

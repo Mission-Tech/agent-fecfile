@@ -1,0 +1,153 @@
+name: Build & release .mcpb
+
+# Build the fecfile-mcp MCP server bundle (.mcpb) and publish it to a GitHub Release,
+# so it can be installed into Claude Desktop / Cowork by opening the file — no clone,
+# no build. The point of the .mcpb: the FEC API calls run in the host-managed MCP
+# server process (API key read from the OS keychain, network egress from that process),
+# not from a script inside the agent's sandbox.
+#
+# Triggers (self-contained; this is a fork, so it can't `uses:` a private org workflow):
+#   pull_request      -> build + verify, upload the .mcpb as a workflow artifact.
+#   push to main      -> the above, AND publish an immutable Release v<version>-<sha>.
+#   push tag 'v*'     -> build + verify + publish a formal Release for that tag.
+#   workflow_dispatch -> build + verify + upload artifact on demand (no Release).
+#
+# Least privilege, two jobs: `build` is read-only and runs on every trigger (including
+# PR-authored content); only `release` gets contents:write, and only on push.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mcpb-release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      name: ${{ steps.build.outputs.name }}
+      version: ${{ steps.build.outputs.version }}
+      sha: ${{ steps.build.outputs.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # Runs on PRs; don't leave a git-auth token in .git/config for PR-authored
+          # build steps to pick up. This job only reads, builds, and uploads.
+          persist-credentials: false
+
+      - name: Build & verify the .mcpb bundle
+        id: build
+        run: |
+          set -euo pipefail
+          test -f manifest.json || { echo "ERROR: no manifest.json at repo root"; exit 1; }
+
+          # name + version flow into shell (the artifact filename here and the
+          # `gh release` recipe in the release job), and this build runs on PR-authored
+          # content — so accept ONLY safe shapes. Off-shape prints empty and fails closed.
+          NAME=$(python3 -c "import json,re; v=str(json.load(open('manifest.json')).get('name','')); print(v if re.fullmatch(r'[A-Za-z0-9._-]+', v) else '')")
+          VERSION=$(python3 -c "import json,re; v=str(json.load(open('manifest.json')).get('version','')); print(v if re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+([-+.][0-9A-Za-z.]+)?', v) else '')")
+          test -n "$NAME"    || { echo "ERROR: manifest name missing or not [A-Za-z0-9._-]"; exit 1; }
+          test -n "$VERSION" || { echo "ERROR: manifest version missing or not plain semver (it is interpolated into a shell command)"; exit 1; }
+          SHA=$(git rev-parse --short HEAD)
+
+          # Pack via the repo's build script (mcpb validate + pack, honoring .mcpbignore).
+          # It runs the mcpb CLI through npx, so only Node.js (preinstalled on the runner)
+          # is needed — no global install.
+          scripts/build-mcpb.sh
+
+          ARTIFACT="dist/${NAME}-${VERSION}.mcpb"
+          test -f "$ARTIFACT" || { echo "ERROR: expected $ARTIFACT was not produced"; ls -la dist || true; exit 1; }
+
+          # Backstop: confirm the bundle wraps the server + manifest and didn't sweep in
+          # the skill, the plugin, or a secret. The real control is .mcpbignore; this just
+          # fails loudly if that ever regresses.
+          unzip -l "$ARTIFACT"
+          unzip -Z1 "$ARTIFACT" | grep -qFx 'manifest.json'        || { echo "ERROR: manifest.json missing from bundle"; exit 1; }
+          unzip -Z1 "$ARTIFACT" | grep -qFx 'mcp-server/server.py' || { echo "ERROR: mcp-server/server.py missing from bundle"; exit 1; }
+          for bad in 'skills/' '.claude-plugin/' '.mcp.json' '.env' '.git/'; do
+            if unzip -Z1 "$ARTIFACT" | grep -qF "$bad"; then
+              echo "ERROR: internal content matching '$bad' leaked into $ARTIFACT (check .mcpbignore)"; exit 1
+            fi
+          done
+          echo "verify OK: $ARTIFACT (v$VERSION) wraps the MCP server + manifest, nothing internal leaked"
+
+          { echo "name=$NAME"; echo "version=$VERSION"; echo "sha=$SHA"; } >> "$GITHUB_OUTPUT"
+
+      - name: Upload .mcpb as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mcpb-bundle
+          path: dist/*.mcpb
+          if-no-files-found: error
+
+  release:
+    # Only when something lands on main or a v* tag is pushed — never on a PR (the build
+    # job's artifact is the pre-merge test build) or on workflow_dispatch.
+    needs: build
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create Releases and upload assets (gh release ...)
+    steps:
+      - name: Download the built .mcpb
+        uses: actions/download-artifact@v7
+        with:
+          name: mcpb-bundle
+          path: dist
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # This job has no checkout, so tell `gh` which repo to act on.
+          GH_REPO: ${{ github.repository }}
+          # Sanitized in the build job (semver / [A-Za-z0-9._-]); passed via env rather
+          # than interpolated into the script body as defense in depth.
+          NAME: ${{ needs.build.outputs.name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA: ${{ needs.build.outputs.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ARTIFACT="dist/${NAME}-${VERSION}.mcpb"
+          test -f "$ARTIFACT" || { echo "ERROR: built artifact $ARTIFACT not found in downloaded dist/"; ls -la dist; exit 1; }
+
+          # A stable-named copy so the "latest" download URL is permanent.
+          LATEST="dist/${NAME}.mcpb"
+          cp "$ARTIFACT" "$LATEST"
+
+          if [ "$REF_TYPE" = "tag" ]; then
+            TAG="$REF_NAME"                       # the version tag a human pushed
+            TITLE="$NAME $REF_NAME"
+            NOTES=(--generate-notes)
+          else
+            TAG="v${VERSION}-${SHA}"              # immutable, per-commit main build
+            TITLE="$NAME v${VERSION} (${SHA})"
+            NOTES=(--notes "Automated build from main @ ${SHA} (v${VERSION}).")
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — updating its assets in place."
+            gh release upload "$TAG" "$ARTIFACT" "$LATEST" --clobber
+            gh release edit "$TAG" --latest --title "$TITLE"
+          else
+            echo "Creating Release $TAG."
+            gh release create "$TAG" "$ARTIFACT" "$LATEST" \
+              --target "$COMMIT_SHA" --latest --title "$TITLE" "${NOTES[@]}"
+          fi
+
+          echo "Published Release $TAG:"
+          echo "  - ${NAME}-${VERSION}.mcpb  (version-stamped)"
+          echo "  - ${NAME}.mcpb             (stable 'latest' name)"
