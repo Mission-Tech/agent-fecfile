@@ -1,7 +1,7 @@
 {
   "name": "fecfile",
-  "description": "Analyze FEC (Federal Election Commission) campaign finance filings. Provides Agent Skill with workflow instructions, form references, and filing analysis scripts. Requires fecfile-mcp MCPB for MCP tools (search_committees, get_filings).",
-  "version": "2.1.0",
+  "description": "Analyze FEC (Federal Election Commission) campaign finance filings. Provides the fecfile Agent Skill with workflow instructions and form references. Requires the fecfile-mcp MCP server (MCPB in the Claude desktop app, manual config elsewhere) for all FEC data access.",
+  "version": "3.0.0",
   "author": {
     "name": "Matt Hodges"
   },

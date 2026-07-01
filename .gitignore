@@ -11,6 +11,8 @@ uv.lock
 
 # Build artifacts
 dist/
+build/
+*.egg-info/
 *.plugin
 *.mcpb
 

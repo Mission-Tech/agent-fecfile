@@ -1,16 +1,30 @@
 [project]
 name = "fecfile-mcp"
-version = "2.1.0"
-description = "FEC Filing MCP Server - secure access to FEC campaign finance data"
+version = "3.0.0"
+description = "FEC Filing MCP Server - all FEC network access for campaign finance analysis"
 authors = [{name = "Matt Hodges"}]
 license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "mcp>=1.27.0,<2",
     "httpx>=0.28.0",
+    "fecfile>=0.9.1",
 ]
+
+[project.scripts]
+fecfile-mcp = "server:cli"
 
 [project.urls]
 Homepage = "https://github.com/hodgesmr/agent-fecfile"
 Repository = "https://github.com/hodgesmr/agent-fecfile"
 Issues = "https://github.com/hodgesmr/agent-fecfile/issues"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# The server is a single module in mcp-server/ (a hyphenated dir, so not a
+# package). This mapping makes `uvx --from git+<repo> fecfile-mcp` work.
+[tool.setuptools]
+package-dir = {"" = "mcp-server"}
+py-modules = ["server"]

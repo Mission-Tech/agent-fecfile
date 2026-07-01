@@ -12,8 +12,11 @@ env/
 server/lib/
 server/venv/
 
-# Python/UV files
+# Python/UV files. The server runs from PEP 723 inline metadata with
+# `uv run --no-project`; pyproject.toml exists for `uvx --from git+...` installs
+# and must not enter the bundle.
 .python-version
+pyproject.toml
 uv.lock
 
 # OS files
@@ -45,7 +48,6 @@ build/
 
 # Plugin-specific (keep plugin working in parallel)
 .claude-plugin/
-.mcp.json
 CLAUDE.md
 
 # Skills (not part of MCPB spec - desktop app won't load them)

@@ -1,16 +1,16 @@
 # Claude Code Plugin: fecfile
 
-This repo contains a Claude Code plugin for analyzing FEC (Federal Election Commission) campaign finance filings. It includes an Agent Skill and an MCP server for secure API access.
+This repo contains a Claude Code plugin for analyzing FEC (Federal Election Commission) campaign finance filings. It includes an Agent Skill and an MCP server that handles all FEC data access.
 
 ## Key Details
 
-- **Plugin name**: `fecfile`
+- **Plugin name**: `fecfile` (ships the Agent Skill only)
 - **Skill name**: `fecfile`
-- **MCP server**: `fec-api` (provides `search_committees` and `get_filings` tools)
-- **Dependencies**: `fecfile`, `mcp`, `httpx` - managed via inline script metadata (PEP 723), auto-installed by `uv run`
-- **Data sources**:
-  - Public: `docquery.fec.gov`
-  - Authenticated: `api.open.fec.gov` (via MCP server)
+- **MCP server**: `fec-api`, distributed as the `fecfile-mcp` MCPB bundle (desktop app) or run manually. Tools: `search_committees`, `get_filings`, `fetch_filing`, `analyze_filing`, `get_version`
+- **Dependencies**: `mcp`, `httpx`, `fecfile` - managed via inline script metadata (PEP 723), auto-installed by `uv run`
+- **Data sources** (reached only from inside the MCP server):
+  - Public: `docquery.fec.gov` (fetch_filing, analyze_filing — no key)
+  - Authenticated: `api.open.fec.gov` (search_committees, get_filings — needs `FEC_API_KEY`)
 - **Python**: Requires 3.10+
 
 ## Project Structure
@@ -20,16 +20,19 @@ agent-fecfile/
 ├── .claude-plugin/
 │   ├── plugin.json              # Plugin manifest (version source of truth)
 │   └── marketplace.json         # Marketplace catalog for plugin distribution
-├── .mcp.json                    # MCP server configuration
+├── manifest.json                # MCPB manifest for the MCP server bundle
 ├── mcp-server/
-│   └── server.py                # MCP server (authenticated FEC API)
+│   └── server.py                # MCP server (all FEC data access)
 ├── skills/fecfile/
 │   ├── SKILL.md                 # Agent Skill instructions
-│   ├── references/              # Form and schedule documentation
-│   │   ├── FORMS.md             # Reference for FEC form types (F1, F2, F3, F99)
-│   │   └── SCHEDULES.md         # Field mappings for Schedules A, B, C, D, E
-│   └── scripts/
-│       └── fetch_filing.py      # Fetches FEC filing data (public API)
+│   └── references/              # Form and schedule documentation
+│       ├── FORMS.md             # Reference for FEC form types (F1, F2, F3, F99)
+│       └── SCHEDULES.md         # Field mappings for Schedules A, B, C, D, E
+├── scripts/
+│   ├── build-mcpb.sh            # Build the .mcpb bundle
+│   └── build-plugin.sh          # Build the .plugin archive
+├── .github/workflows/
+│   └── mcpb-release.yml         # CI: build, verify, and release the .mcpb
 ├── README.md                    # Installation and usage for end users
 ├── CHANGELOG.md                 # Version history
 └── release.sh                   # Automated release script
@@ -37,17 +40,15 @@ agent-fecfile/
 
 ## Development Commands
 
-**Public API (no key required):**
-- `uv run skills/fecfile/scripts/fetch_filing.py <FILING_ID>`: Fetch a full filing as JSON
-- `uv run skills/fecfile/scripts/fetch_filing.py <FILING_ID> --summary-only`: Summary only
-- `uv run skills/fecfile/scripts/fetch_filing.py <FILING_ID> --schedule A`: Limit to a single schedule
-- `uv run skills/fecfile/scripts/fetch_filing.py <FILING_ID> --stream`: JSONL streaming
+**MCP server (manual run):**
 
-**MCP Server:**
-- In v2.1.0+, the MCP server is distributed via MCPB (separate from plugin)
-- The server reads the FEC API key from the `FEC_API_KEY` environment variable
-- MCPB's `user_config` handles keychain storage and env var injection
-- For manual testing: `FEC_API_KEY=your-key uv run mcp-server/server.py`
+- `FEC_API_KEY=your-key uv run mcp-server/server.py` — run from a clone (key optional; without it only the filing tools work)
+- `uvx --from git+https://github.com/hodgesmr/agent-fecfile fecfile-mcp` — run straight from git (the `[project.scripts]` entry in pyproject.toml)
+
+**Bundles:**
+
+- `scripts/build-mcpb.sh` — validate the manifest and pack `dist/fecfile-mcp-<version>.mcpb` (runs the mcpb CLI via npx; needs Node.js)
+- `scripts/build-plugin.sh` — build `dist/fecfile-<version>.plugin` for local testing
 
 ## Coding Style & Naming Conventions
 
@@ -60,72 +61,64 @@ agent-fecfile/
 ## Testing Guidelines
 
 - There is no automated test suite in this repository
-- Validate changes manually by running scripts with a known filing ID
-- For MCP server changes, test with `claude --plugin-dir .` from the repo root
-- For large filings, verify `--summary-only` or `--stream` behavior
+- Validate changes manually by exercising the MCP tools with a known filing ID
+- For skill changes, test with `claude --plugin-dir .` from the repo root
+- For large filings, verify `fetch_filing` (`summary_only`, `min_amount`) and `analyze_filing` behavior
 
 ## Releases
 
-Releases use semver tags (e.g., `2.0.0`) plus a `latest` tag that always points to the most recent stable release.
+Releases use semver tags (e.g., `3.0.0`) plus a `latest` tag that always points to the most recent stable release. The GitHub Actions workflow (`.github/workflows/mcpb-release.yml`) builds and verifies the `.mcpb` on every PR, and attaches it to a GitHub Release on pushes to main and version tags.
 
 ### Versioning Strategy
 
-The version is tracked in **three places** that must stay in sync:
+The version is tracked in **several places** that must stay in sync:
 
 1. `.claude-plugin/plugin.json` - Primary source of truth
 2. `skills/fecfile/SKILL.md` - Metadata frontmatter
-3. `CHANGELOG.md` - Version history
+3. `manifest.json` - MCPB bundle version
+4. `pyproject.toml` - Python project version
+5. `mcp-server/server.py` - `SERVER_VERSION` constant (what `get_version` reports)
+6. `CHANGELOG.md` - Version history
 
 ### Release Process
 
-1. Update the version in `.claude-plugin/plugin.json`:
-   ```json
-   {
-     "version": "2.1.0"
-   }
-   ```
+1. Bump the version in all the files listed above
 
-2. Update the version in `skills/fecfile/SKILL.md` frontmatter:
-   ```yaml
-   metadata:
-     author: Matt Hodges
-     version: "2.1.0"
-   ```
-
-3. Update `CHANGELOG.md`:
+2. Update `CHANGELOG.md`:
    - Add a new section at the top (below the header) for the new version
    - Use the format `## [X.Y.Z] - YYYY-MM-DD`
    - Document changes under `### Added`, `### Changed`, `### Fixed`, or `### Removed`
    - Add a comparison link at the bottom: `[X.Y.Z]: https://github.com/hodgesmr/agent-fecfile/compare/PREV...X.Y.Z`
 
-4. Commit the version bump and changelog update
+3. Commit the version bump and changelog update
 
-5. Run the release script:
+4. Run the release script:
    ```bash
    ./release.sh
    ```
 
-The script extracts the version from plugin.json, creates the version tag, updates the `latest` tag, and pushes both.
+The script extracts the version from plugin.json, creates the version tag, updates the `latest` tag, and pushes both. The tag push triggers the CI workflow, which builds the `.mcpb` and attaches it to the Release.
 
 ## Architecture Notes
 
 ### MCP Server
 
-The MCP server (`mcp-server/server.py`) provides secure API access:
-- Reads FEC API key from `FEC_API_KEY` environment variable **on first tool use** (lazy loading)
+The MCP server (`mcp-server/server.py`) handles all FEC network access:
+
+- Reads the FEC API key from the `FEC_API_KEY` environment variable **on first tool use** (lazy loading); the key is optional and only gates the search tools
 - MCPB's `user_config` handles keychain storage and injects the key via env var
 - Key held in memory, never exposed to the model
-- Exposes `search_committees` and `get_filings` as MCP tools
-- Uses stdio transport for communication with Claude Code
-- Works with any MCP-compatible runtime (Claude Code, Claude Desktop, etc.)
+- `fetch_filing` and `analyze_filing` stream filings from the public archive with the `fecfile` library — pagination, `min_amount` filtering, top-N, and group-totals all run server-side so large filings never enter the model's context
+- Uses stdio transport; works with any MCP-compatible runtime
 
 ### Agent Skill
 
 The skill (`skills/fecfile/SKILL.md`) provides:
-- Instructions for analyzing FEC filings
-- Documentation of MCP tools
+
+- Instructions for analyzing FEC filings through the MCP tools only (it makes no network calls itself)
+- A first-time check that detects a missing server and walks the user through installing it
 - Field reference for forms and schedules
-- Large filing handling strategies
+- Large filing handling strategies (server-side reduction first)
 
 ## Acknowledgments
 

@@ -20,7 +20,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if command -v mcpb >/dev/null 2>&1; then
   MCPB=(mcpb)
 elif command -v npx >/dev/null 2>&1; then
-  MCPB=(npx --yes @anthropic-ai/mcpb)
+  # Pinned to major 2 so a release build can't silently jump to a new major.
+  MCPB=(npx --yes @anthropic-ai/mcpb@2)
 else
   echo "Error: need the 'mcpb' CLI, which requires Node.js (for npx)." >&2
   echo "  Install Node.js (it includes npx):  https://nodejs.org" >&2

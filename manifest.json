@@ -2,9 +2,9 @@
   "manifest_version": "0.4",
   "name": "fecfile-mcp",
   "display_name": "FEC Filing MCP Server",
-  "version": "2.1.0",
-  "description": "Search FEC committees and retrieve campaign finance filings",
-  "long_description": "An MCP server providing secure access to the FEC API for searching committees and retrieving campaign finance filings. The API key is configured during installation and stored securely in your system keychain/credential manager.",
+  "version": "3.0.0",
+  "description": "Search FEC committees, retrieve campaign finance filings, and analyze them server-side",
+  "long_description": "An MCP server providing all FEC network access for campaign finance analysis: committee and filing search against the authenticated FEC API, plus filing retrieval and server-side analysis (top items, group totals) from the public filing archive. The API key is optional — it is needed only for committee/filing search, is configured during installation, and is stored securely in your system keychain/credential manager. Filing retrieval and analysis by filing ID need no key.",
   "icon": "icon.png",
   "author": {
     "name": "Matt Hodges"
@@ -24,9 +24,9 @@
       "command": "uv",
       "args": [
         "run",
+        "--no-project",
         "--directory",
         "${__dirname}",
-        "python",
         "${__dirname}/mcp-server/server.py"
       ],
       "env": {
@@ -37,11 +37,23 @@
   "tools": [
     {
       "name": "search_committees",
-      "description": "Search for FEC committees by name. Returns committee IDs that can be used with get_filings."
+      "description": "Search for FEC committees by name. Returns committee IDs that can be used with get_filings. Requires the FEC API key."
     },
     {
       "name": "get_filings",
-      "description": "Get FEC filings for a committee. Returns filing IDs, dates, and financial summaries. Filter by cycle, form type, or report type."
+      "description": "Get FEC filings for a committee. Returns filing IDs, dates, and financial summaries. Filter by cycle, form type, or report type. Requires the FEC API key."
+    },
+    {
+      "name": "fetch_filing",
+      "description": "Fetch one filing's summary or a page of schedule itemizations from the public filing archive. No API key needed."
+    },
+    {
+      "name": "analyze_filing",
+      "description": "Stream a whole filing schedule server-side and return the N largest items or totals grouped by a field. No API key needed."
+    },
+    {
+      "name": "get_version",
+      "description": "Report the running server version."
     }
   ],
   "compatibility": {
@@ -54,9 +66,9 @@
     "fec_api_key": {
       "type": "string",
       "title": "FEC API Key",
-      "description": "Your API key from api.open.fec.gov/developers (required for committee search and filing data)",
+      "description": "Your API key from api.open.fec.gov/developers. Optional — needed only for committee/filing search; filing analysis by filing ID works without it.",
       "sensitive": true,
-      "required": true
+      "required": false
     }
   },
   "keywords": [

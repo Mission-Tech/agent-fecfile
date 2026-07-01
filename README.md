@@ -2,41 +2,36 @@
 
 ![agent-fecfile](./agent-fecfile.jpeg)
 
-## FEC Filing Plugin for Claude Code
+## FEC Filing Plugin for Claude
 
-A [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) for analyzing Federal Election Commission (FEC) campaign finance filings. Includes an [Agent Skill](https://agentskills.io) and an [MCP server](https://modelcontextprotocol.io) for API access.
+A [Claude Code plugin](https://docs.anthropic.com/en/docs/claude-code/plugins) for analyzing Federal Election Commission (FEC) campaign finance filings. Includes an [Agent Skill](https://agentskills.io) and an [MCP server](https://modelcontextprotocol.io) that handles all FEC data access.
 
-This plugin enables AI agents to fetch, parse, and analyze FEC filings directly within agent sessions. Parsing and filtering happen outside the model context, allowing agents to programmatically reduce large filings before analysis, saving tokens and enabling efficient queries against filings of any size.
+This project enables AI agents to fetch, parse, and analyze FEC filings directly within agent sessions. Filing retrieval and heavy reduction (top items, group totals) happen inside the MCP server — outside the model context — so agents can work with filings of any size without flooding their context window, and without needing network access to FEC hosts or a copy of the API key.
 
-The plugin includes detailed field mappings for common form types and schedules, helping agents accurately interpret campaign finance data like contributions, disbursements, and committee information.
+The skill includes detailed field mappings for common form types and schedules, helping agents accurately interpret campaign finance data like contributions, disbursements, and committee information.
 
 ## Features
 
-- Fetch and analyze FEC filings by filing ID (Agent Skill)
-- Search for committees and filings via the FEC API (MCP server)
-- Support for major form types (F1, F2, F3, F99)
-- Detailed field mappings for contributions, disbursements, and schedules
-- Auto-installing dependencies via uv
+- Search for committees and filings via the FEC API (`search_committees`, `get_filings`)
+- Fetch filing summaries and schedule itemizations by filing ID, no API key needed (`fetch_filing`)
+- Server-side analysis of whole filings — top N items by amount, totals grouped by any field — in constant memory (`analyze_filing`)
+- Support for major form types (F1, F2, F3, F99) with detailed field mappings
+- API key stored in your system keychain (Claude desktop app) or an environment variable — never visible to the model
 
-## Requirements
+## Two Components
 
-- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) or [Claude Desktop](https://claude.ai/download) or another MCP-compatible runtime
-- [uv](https://docs.astral.sh/uv/) (for running Python scripts via the skill)
-- Python 3.10+
-- An [FEC API key](https://api.open.fec.gov/developers/) (for MCP committee/filing search tools)
+| Component | What it is | Installed as |
+|---|---|---|
+| **Agent Skill** (`fecfile`) | The analysis workflow and form/schedule references | Claude Code plugin (CLI or desktop app) |
+| **MCP server** (`fecfile-mcp`) | All FEC data access: search, fetch, analyze | MCPB bundle (desktop app) or manual MCP config (Claude Code, other runtimes) |
+
+The skill tells the agent *how* to analyze filings; the MCP server provides the tools that actually touch the FEC. You need both. If the server isn't installed, the skill stops and walks you through setting it up.
 
 ## Installation
 
-**This project has two components** that can be installed separately:
+### 1. The plugin (Agent Skill)
 
-1. **Plugin** (Claude Code only): Agent Skill + filing analysis scripts
-2. **MCPB** (Claude Desktop + Claude Code): MCP server for committee search
-
-Most users will want both. Installation instructions for each are below.
-
-### Claude Code Plugin (Recommended)
-
-Install via the Claude Code plugin system:
+**Claude Code (terminal):**
 
 ```bash
 # Add the marketplace
@@ -48,29 +43,16 @@ claude plugin install fecfile@agent-fecfile
 
 You may need to restart your Claude Code session to properly load the Agent Skill.
 
-**What's included:**
-- ✅ Agent Skill (`fecfile`) with workflow instructions and form references
-- ✅ Filing analysis script (`fetch_filing.py`) for public API access
-- ⚠️ **MCP server NOT included** - Install separately via MCPB (see below)
-
-**To get the MCP tools** (`search_committees`, `get_filings`):
-1. Download the latest `fecfile-mcp-*.mcpb` from [releases](https://github.com/hodgesmr/agent-fecfile/releases)
-2. Double-click to install
-3. Enter your FEC API key when prompted
-
 **Updating:**
 
 ```bash
-# Update the marketplace
 claude plugin marketplace update agent-fecfile
-
-# Update the plugin
 claude plugin update fecfile@agent-fecfile
 ```
 
-### Claude desktop app / Cowork (Customize menu, no terminal)
+**Claude desktop app / Cowork (Customize menu, no terminal):**
 
-In the Claude desktop app (Cowork) you add the marketplace and install the plugin through the **Customize** menu instead of the CLI. Anthropic's [Use plugins in Claude](https://support.claude.com/en/articles/13837440-use-plugins-in-claude) help article is the full walkthrough; the short version:
+In the Claude desktop app you add the marketplace and install the plugin through the **Customize** menu instead of the CLI. Anthropic's [Use plugins in Claude](https://support.claude.com/en/articles/13837440-use-plugins-in-claude) help article is the full walkthrough; the short version:
 
 1. Open **Customize** in the left sidebar, then the **Plugins** tab.
 2. Under **Personal plugins**, click **+** → **Add marketplace** → **Add from a repository**.
@@ -79,40 +61,40 @@ In the Claude desktop app (Cowork) you add the marketplace and install the plugi
 
 The `fecfile` skill is then available in chat and Cowork tasks — type `/` or click **+** to use it.
 
-> [!IMPORTANT]
-> This installs the **skill** only. The committee/filing search tools (`search_committees`, `get_filings`) come from the **MCPB**, which installs separately — see [Claude Desktop (MCPB)](#claude-desktop-mcpb). Without the MCPB the skill can still analyze a filing you give it by ID, but can't look committees up by name.
+### 2. The MCP server
 
-### Claude Desktop (MCPB)
+**Claude desktop app (MCPB — recommended for desktop/Cowork):**
 
-For Claude Desktop users who only need the MCP server tools (without the Agent Skill):
+1. Download the latest `fecfile-mcp-*.mcpb` from the [releases page](https://github.com/hodgesmr/agent-fecfile/releases)
+2. Open the `.mcpb` file (double-click), or drag it into **Settings → Extensions**
+3. Optionally enter your FEC API key when prompted (get one free at [api.open.fec.gov/developers](https://api.open.fec.gov/developers)) — it's stored in your system keychain and needed only for committee/filing search; analyzing a filing you already have the ID for works without it
 
-1. **Download the `.mcpb` file** from the [latest release](https://github.com/hodgesmr/agent-fecfile/releases)
-2. **Double-click** the `.mcpb` file to install
-3. **Enter your FEC API key** when prompted (get one free at [api.open.fec.gov/developers](https://api.open.fec.gov/developers))
-4. The key is stored securely in your system keychain/credential manager
+Installed this way, the server is its own extension you can enable or disable independently of the plugin, and its network calls to the FEC run from the app — not from the agent's sandbox.
 
-The MCP server provides two tools:
-- `search_committees` - Search for FEC committees by name
-- `get_filings` - Get filings for a specific committee
+Requires [uv](https://docs.astral.sh/uv/) (the bundle's `uv` runtime launches the server; dependencies install automatically).
 
-> [!NOTE]
-> The MCPB bundle includes only the MCP server. For the full workflow with Agent Skill, form references, and filing analysis scripts, use the Claude Code plugin instead.
+**Claude Code (terminal):**
 
-### Other MCP-Compatible Runtimes
-
-For runtimes that support MCP but not Claude Code plugins or MCPB:
-
-The MCP server can be run manually with environment variable configuration:
+The `.mcpb` format is desktop-only — Claude Code can't install it, and desktop-installed extensions aren't visible to the CLI. Register the server directly instead:
 
 ```bash
-# Set your API key
-export FEC_API_KEY="your-api-key-here"
-
-# Run the server
-uv run mcp-server/server.py
+claude mcp add fec-api --env FEC_API_KEY=YOUR_KEY -- uvx --from git+https://github.com/hodgesmr/agent-fecfile fecfile-mcp
 ```
 
-Configure your MCP client to connect to this stdio server. The API key must be provided via the `FEC_API_KEY` environment variable.
+Omit `--env FEC_API_KEY=...` if you only analyze filings by ID and don't need committee search. Requires [uv](https://docs.astral.sh/uv/).
+
+**Other MCP-compatible runtimes:**
+
+The server is a stdio MCP server configured by environment variable:
+
+```bash
+export FEC_API_KEY="your-api-key-here"   # optional
+uv run mcp-server/server.py               # from a clone, or: uvx --from git+https://github.com/hodgesmr/agent-fecfile fecfile-mcp
+```
+
+### Upgrading from 2.x or 1.x
+
+v3.0.0 is a breaking change: the plugin no longer bundles an MCP server or the `fetch_filing.py` script — **all** FEC access now comes from the separately installed `fecfile-mcp` server. After upgrading the plugin, install the server per [The MCP server](#2-the-mcp-server) above. Until you do, the skill will detect the missing tools and show these same instructions instead of analyzing anything. The old keychain item from 1.x's `keyring` setup is no longer read and can be deleted.
 
 ## Usage
 
@@ -169,35 +151,9 @@ If you already have an FEC filing ID, you can work with it directly, without nee
   6 states total, with only 7 out-of-state contributions.
 ```
 
-### FEC API Setup
-
-The MCP server provides committee and filing search via the authenticated FEC API.
-
-#### 1. Get an API Key
-
-1. Visit https://api.open.fec.gov/developers/
-2. Go to "Sign up for an API key" and fill out the form
-3. You'll receive your API key via email
-
-#### 2. Store Your API Key
-
-To shield the key from LLM model consumption, the API key must be stored in your system keyring. The MCP server uses the Python [keyring](https://pypi.org/project/keyring/) library, which supports a variety of operating system keyrings.
-
-**macOS:**
-
-1. Open Keychain Access (Applications → Utilities → Keychain Access)
-2. Click File → New Password Item (or press ⌘N)
-3. Fill in:
-   - Keychain Item Name: `fec-api`
-   - Account Name: `api-key`
-   - Password: *your API key*
-4. Click Add
-
 ### Searching For Committees and Filings
 
-Once your API key is stored, queries become more powerful. You can search for committees and filings without knowing the filing ID in advance.
-
-The MCP server provides `search_committees` and `get_filings` tools. The API key is loaded once at server startup and kept in memory—it is never visible to the model.
+With an API key configured, queries become more powerful. You can search for committees and filings without knowing the filing ID in advance.
 
 ```text
 ❯ What are the top expenditures in Utah Republican Party's most recent filing?
@@ -234,6 +190,15 @@ The MCP server provides `search_committees` and `get_filings` tools. The API key
   to USPS and CPMI Solutions) and NationBuilder software subscriptions (~$5,600).
 ```
 
+### FEC API Setup
+
+Committee and filing search (`search_committees`, `get_filings`) uses the authenticated FEC API and needs a key. Filing analysis by ID does not.
+
+1. Visit https://api.open.fec.gov/developers/
+2. Go to "Sign up for an API key" and fill out the form
+3. You'll receive your API key via email
+4. Enter it where your runtime expects it: the extension's settings in the Claude desktop app (stored in your system keychain), or the `FEC_API_KEY` environment variable for manual configurations
+
 ## Project Structure
 
 ```
@@ -241,33 +206,37 @@ agent-fecfile/
 ├── .claude-plugin/
 │   ├── plugin.json              # Plugin manifest (version source of truth)
 │   └── marketplace.json         # Marketplace catalog for plugin distribution
-├── .mcp.json                    # MCP server configuration
+├── manifest.json                # MCPB manifest for the MCP server bundle
 ├── mcp-server/
-│   └── server.py                # MCP server (authenticated FEC API)
+│   └── server.py                # MCP server (all FEC data access)
 ├── skills/fecfile/
 │   ├── SKILL.md                 # Agent Skill instructions
-│   ├── references/              # Form and schedule documentation
-│   │   ├── FORMS.md             # Reference for FEC form types (F1, F2, F3, F99)
-│   │   └── SCHEDULES.md         # Field mappings for Schedules A, B, C, D, E
-│   └── scripts/
-│       └── fetch_filing.py      # Fetches FEC filing data (public API)
+│   └── references/              # Form and schedule documentation
+│       ├── FORMS.md             # Reference for FEC form types (F1, F2, F3, F99)
+│       └── SCHEDULES.md         # Field mappings for Schedules A, B, C, D, E
+├── scripts/
+│   ├── build-mcpb.sh            # Build the .mcpb bundle
+│   └── build-plugin.sh          # Build the .plugin archive
+├── .github/workflows/
+│   └── mcpb-release.yml         # CI: build, verify, and release the .mcpb
 ├── README.md                    # Installation and usage for end users
 ├── CHANGELOG.md                 # Version history
 └── release.sh                   # Automated release script
 ```
 
 The MCP server:
-- Loads the FEC API key from keyring **on first tool use** (not at startup)
-- Holds the key in memory, never exposing it to the model
-- Provides `search_committees` and `get_filings` tools
+
+- Handles every FEC network request (`api.open.fec.gov` for search, `docquery.fec.gov` for filings) — the agent never talks to FEC hosts
+- Loads the FEC API key from the `FEC_API_KEY` environment variable **on first tool use**, holds it in memory, and never exposes it to the model
+- Provides `search_committees`, `get_filings`, `fetch_filing`, `analyze_filing`, and `get_version`
 
 ## Security Notes
 
-- **Network access**: This plugin requires network access to fetch data from the FEC (`docquery.fec.gov`, `api.open.fec.gov`). It will not work in environments where external network access is restricted.
+- **Network access**: All FEC requests (`docquery.fec.gov`, `api.open.fec.gov`) run inside the MCP server process. In the Claude desktop app that's the app itself — the agent's sandbox needs no network access to FEC hosts, and no FEC credentials ever enter it.
 
 - **Untrusted content**: FEC filings should be considered [untrusted content](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/). A malicious campaign sneaking prompt injections into the memo text field of their F99 is probably unlikely, but not impossible.
 
-- **Keyring access**: The MCP server accesses the keyring **on first tool use**. You should expect a system prompt (e.g., "Python wants to access your keychain") when your agent first calls the MCP server. This is normal. The key is held in the MCP server's memory for the session duration. You should **not** see keyring prompts at any other time; if you do, investigate.
+- **API key handling**: In the desktop app, the key is collected at install time and stored in your operating system's keychain/credential manager; the server receives it as an environment variable and sanitizes error output so it can't leak into the transcript. The model never sees the key.
 
 ## Acknowledgments
 

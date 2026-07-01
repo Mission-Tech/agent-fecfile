@@ -4,29 +4,42 @@
 # dependencies = [
 #     "mcp>=1.27.0,<2",
 #     "httpx>=0.28.0",
+#     "fecfile>=0.9.1",
 # ]
 # ///
 """
 FEC API MCP Server
 
-An MCP server that provides secure access to the FEC API. The API key is loaded
-from the FEC_API_KEY environment variable on first tool use and cached,
-preventing the LLM from ever seeing or accessing the credential. This lazy
-loading ensures the server starts quickly even when the user isn't doing FEC work.
+An MCP server that provides all FEC network access for the fecfile skill:
+committee/filing search against the authenticated FEC API, and filing
+retrieval/analysis from the public filing archive. Because every FEC request
+runs inside this server process, the calling agent needs neither the API key
+nor network access to FEC hosts.
+
+The API key is loaded from the FEC_API_KEY environment variable on first tool
+use and cached, preventing the LLM from ever seeing or accessing the
+credential. Filing retrieval (fetch_filing, analyze_filing) uses the public
+archive and needs no key.
 
 Tools:
-    - search_committees: Search for FEC committees by name
-    - get_filings: Get filings for a specific committee
+    - search_committees: Search for FEC committees by name (requires API key)
+    - get_filings: List filings for a committee (requires API key)
+    - fetch_filing: Fetch a filing's summary or a page of schedule items
+    - analyze_filing: Stream a whole filing server-side for top-N / group totals
+    - get_version: Report the running server version
 
 The server uses stdio transport for communication with MCP clients.
 """
 
+import asyncio
+import heapq
 import json
 import os
 import re
-import sys
+from collections import defaultdict
 from typing import Optional
 
+import fecfile
 import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
@@ -34,12 +47,128 @@ from mcp.types import Tool, TextContent
 
 # Constants
 FEC_API_BASE = "https://api.open.fec.gov/v1"
-SERVER_VERSION = "2.1.1"
+SERVER_VERSION = "3.0.0"
+
+# Schedule letter -> fecfile itemization filter code, and each schedule's
+# dollar-amount field (names per skills/fecfile/references/SCHEDULES.md).
+SCHEDULE_CODES = {"A": "SA", "B": "SB", "C": "SC", "D": "SD", "E": "SE"}
+AMOUNT_FIELDS = {
+    "A": "contribution_amount",
+    "B": "expenditure_amount",
+    "C": "loan_amount",
+    "D": "debt_amount",
+    "E": "expenditure_amount",
+}
+
+MAX_PAGE_ITEMS = 500
+MAX_TOP_N = 100
+MAX_GROUPS = 200
 
 
 def sanitize_api_key(text: str) -> str:
     """Remove API key from text to prevent accidental exposure."""
     return re.sub(r"api_key=[^&\s]+", "api_key=REDACTED", text)
+
+
+def _norm_schedule(value) -> Optional[str]:
+    """Normalize 'a' / 'SA' / 'Schedule A' to the single letter, or None."""
+    v = str(value or "").strip().upper()
+    if v.startswith("SCHEDULE"):
+        v = v.split()[-1]
+    if len(v) == 2 and v.startswith("S"):
+        v = v[1]
+    return v if v in SCHEDULE_CODES else None
+
+
+def _amount(item: dict, field: str) -> float:
+    try:
+        return float(item.get(field) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _iter_items(filing_id: int, schedule: str):
+    """Yield itemization dicts for one schedule, streaming the filing."""
+    options = {"filter_itemizations": [SCHEDULE_CODES[schedule]]}
+    for row in fecfile.iter_http(filing_id, options=options):
+        if row.data_type == "itemization":
+            yield row.data
+
+
+def _fetch_summary(filing_id: int) -> dict:
+    """Fetch just the filing header + summary, stopping the stream early."""
+    out = {}
+    for row in fecfile.iter_http(filing_id, options={"filter_itemizations": []}):
+        if row.data_type in ("header", "summary"):
+            out[row.data_type] = row.data
+        if "summary" in out:
+            break
+    return out
+
+
+def _fetch_page(filing_id: int, schedule: str, offset: int, limit: int,
+                min_amount: Optional[float]) -> dict:
+    # ponytail: stateless — each page re-streams the filing from the start.
+    # Fine for the first pages; deep paging on huge filings should use
+    # min_amount or analyze_filing instead (the tool description says so).
+    field = AMOUNT_FIELDS[schedule]
+    items, skipped, has_more = [], 0, False
+    for item in _iter_items(filing_id, schedule):
+        if min_amount is not None and _amount(item, field) < min_amount:
+            continue
+        if skipped < offset:
+            skipped += 1
+            continue
+        if len(items) < limit:
+            items.append(item)
+        else:
+            has_more = True
+            break
+    return {
+        "filing_id": filing_id,
+        "schedule": schedule,
+        "offset": offset,
+        "returned": len(items),
+        "has_more": has_more,
+        "items": items,
+    }
+
+
+def _analyze(filing_id: int, schedule: str, operation: str, n: int,
+             group_by: Optional[str]) -> dict:
+    """Full streaming pass over one schedule; constant memory."""
+    field = AMOUNT_FIELDS[schedule]
+    if operation == "top_items":
+        top = heapq.nlargest(
+            n, _iter_items(filing_id, schedule), key=lambda i: _amount(i, field)
+        )
+        return {
+            "filing_id": filing_id,
+            "schedule": schedule,
+            "operation": "top_items",
+            "amount_field": field,
+            "items": top,
+        }
+    # totals_by_field
+    totals: dict = defaultdict(float)
+    counts: dict = defaultdict(int)
+    for item in _iter_items(filing_id, schedule):
+        key = str(item.get(group_by) or "Unknown")
+        totals[key] += _amount(item, field)
+        counts[key] += 1
+    groups = sorted(totals, key=lambda k: -totals[k])
+    return {
+        "filing_id": filing_id,
+        "schedule": schedule,
+        "operation": "totals_by_field",
+        "group_by": group_by,
+        "amount_field": field,
+        "groups": {
+            g: {"count": counts[g], "total": round(totals[g], 2)}
+            for g in groups[:MAX_GROUPS]
+        },
+        "truncated": len(groups) > MAX_GROUPS,
+    }
 
 
 class FECAPIServer:
@@ -62,10 +191,11 @@ class FECAPIServer:
         """
         Load the FEC API key from the FEC_API_KEY environment variable.
 
-        Returns None if the key is not set, allowing the server to start
-        without a key (for public-only access via other means).
+        Returns None if the key is unset or empty (an MCPB host may inject an
+        empty string when the optional field is left blank), allowing the
+        server to start and serve the keyless filing tools.
         """
-        return os.getenv("FEC_API_KEY")
+        return os.getenv("FEC_API_KEY") or None
 
     def _setup_handlers(self):
         """Configure MCP server handlers."""
@@ -91,7 +221,7 @@ class FECAPIServer:
                         "Search for FEC committees by name. Returns committee IDs "
                         "that can be used with get_filings. Requires FEC API key "
                         "to be configured. For detailed filing analysis, invoke the "
-                        "fecfile skill which provides the proper uv-based workflow."
+                        "fecfile skill which provides the proper workflow."
                     ),
                     inputSchema={
                         "type": "object",
@@ -116,7 +246,7 @@ class FECAPIServer:
                         "and financial summaries. Use search_committees first to find "
                         "the committee ID. Requires FEC API key to be configured. "
                         "For detailed filing analysis, invoke the fecfile skill which "
-                        "provides the proper uv-based workflow."
+                        "provides the proper workflow."
                     ),
                     inputSchema={
                         "type": "object",
@@ -156,6 +286,103 @@ class FECAPIServer:
                         "required": ["committee_id"],
                     },
                 ),
+                Tool(
+                    name="fetch_filing",
+                    description=(
+                        "Fetch data from one FEC filing (public archive, no API key "
+                        "needed). Call with summary_only=true first to see the "
+                        "filing's financial totals and gauge its size, then pull "
+                        "schedule itemizations in pages. min_amount filters items "
+                        "before offset/limit apply. Each page re-streams the filing "
+                        "from the start, so prefer min_amount or analyze_filing over "
+                        "paging deep into a large filing."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "filing_id": {
+                                "type": "integer",
+                                "description": "FEC filing ID (positive integer)",
+                            },
+                            "summary_only": {
+                                "type": "boolean",
+                                "description": "Return only the filing header and summary (no itemizations)",
+                                "default": False,
+                            },
+                            "schedule": {
+                                "type": "string",
+                                "description": (
+                                    "Schedule letter to fetch: A (contributions), B "
+                                    "(disbursements), C (loans), D (debts), E (independent "
+                                    "expenditures). Required unless summary_only."
+                                ),
+                            },
+                            "offset": {
+                                "type": "integer",
+                                "description": "Number of (post-filter) items to skip (default: 0)",
+                                "default": 0,
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": f"Maximum items to return (default: 100, max: {MAX_PAGE_ITEMS})",
+                                "default": 100,
+                            },
+                            "min_amount": {
+                                "type": "number",
+                                "description": "Only include items with an amount at or above this value",
+                            },
+                        },
+                        "required": ["filing_id"],
+                    },
+                ),
+                Tool(
+                    name="analyze_filing",
+                    description=(
+                        "Analyze one schedule of an FEC filing server-side without "
+                        "returning every item (public archive, no API key needed). "
+                        "operation=top_items returns the N largest items by dollar "
+                        "amount; operation=totals_by_field returns count and total "
+                        "grouped by a field (e.g. contributor_state). Streams the "
+                        "entire schedule in constant memory — the right tool for "
+                        "large filings; may take a while on very large ones."
+                    ),
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "filing_id": {
+                                "type": "integer",
+                                "description": "FEC filing ID (positive integer)",
+                            },
+                            "schedule": {
+                                "type": "string",
+                                "description": "Schedule letter to analyze: A, B, C, D, or E",
+                            },
+                            "operation": {
+                                "type": "string",
+                                "enum": ["top_items", "totals_by_field"],
+                                "description": (
+                                    "top_items: N largest items by amount. "
+                                    "totals_by_field: count/total per value of group_by."
+                                ),
+                            },
+                            "n": {
+                                "type": "integer",
+                                "description": f"How many top items to return (default: 10, max: {MAX_TOP_N})",
+                                "default": 10,
+                            },
+                            "group_by": {
+                                "type": "string",
+                                "description": (
+                                    "Field to group by for totals_by_field (e.g. "
+                                    "contributor_state, payee_organization_name). Field "
+                                    "names are documented in the fecfile skill's "
+                                    "SCHEDULES.md reference."
+                                ),
+                            },
+                        },
+                        "required": ["filing_id", "schedule", "operation"],
+                    },
+                ),
             ]
 
         @self.server.call_tool()
@@ -166,8 +393,114 @@ class FECAPIServer:
                 return await self._search_committees(arguments)
             elif name == "get_filings":
                 return await self._get_filings(arguments)
+            elif name == "fetch_filing":
+                return await self._fetch_filing(arguments)
+            elif name == "analyze_filing":
+                return await self._analyze_filing(arguments)
             else:
                 return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
+    @staticmethod
+    def _filing_error(e: Exception):
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"Error fetching filing ({type(e).__name__}): "
+                    f"{sanitize_api_key(str(e))}"
+                ),
+            )
+        ]
+
+    async def _fetch_filing(self, arguments: dict):
+        """Fetch a filing summary or a page of schedule itemizations."""
+        try:
+            filing_id = int(arguments.get("filing_id", 0))
+            offset = max(int(arguments.get("offset", 0)), 0)
+            limit = min(max(int(arguments.get("limit", 100)), 1), MAX_PAGE_ITEMS)
+            min_amount = arguments.get("min_amount")
+            min_amount = float(min_amount) if min_amount is not None else None
+        except (TypeError, ValueError):
+            return [
+                TextContent(
+                    type="text",
+                    text="filing_id, offset, and limit must be integers; min_amount must be a number.",
+                )
+            ]
+        if filing_id <= 0:
+            return [TextContent(type="text", text="filing_id must be a positive integer.")]
+
+        if arguments.get("summary_only", False):
+            try:
+                # fecfile is synchronous; run it off the event loop.
+                summary = await asyncio.to_thread(_fetch_summary, filing_id)
+            except Exception as e:
+                return self._filing_error(e)
+            return [TextContent(type="text", text=json.dumps(summary, indent=2, default=str))]
+
+        schedule = _norm_schedule(arguments.get("schedule"))
+        if schedule is None:
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        "Provide either summary_only=true or a schedule letter "
+                        "(A, B, C, D, or E). Fetching a whole filing at once is "
+                        "not supported — check the summary first, then pull the "
+                        "schedule you need."
+                    ),
+                )
+            ]
+
+        try:
+            page = await asyncio.to_thread(
+                _fetch_page, filing_id, schedule, offset, limit, min_amount
+            )
+        except Exception as e:
+            return self._filing_error(e)
+        return [TextContent(type="text", text=json.dumps(page, indent=2, default=str))]
+
+    async def _analyze_filing(self, arguments: dict):
+        """Server-side top-N / group-totals over one schedule of a filing."""
+        try:
+            filing_id = int(arguments.get("filing_id", 0))
+            n = min(max(int(arguments.get("n", 10)), 1), MAX_TOP_N)
+        except (TypeError, ValueError):
+            return [TextContent(type="text", text="filing_id and n must be integers.")]
+        if filing_id <= 0:
+            return [TextContent(type="text", text="filing_id must be a positive integer.")]
+
+        schedule = _norm_schedule(arguments.get("schedule"))
+        if schedule is None:
+            return [TextContent(type="text", text="schedule must be A, B, C, D, or E.")]
+
+        operation = arguments.get("operation", "")
+        if operation not in ("top_items", "totals_by_field"):
+            return [
+                TextContent(
+                    type="text",
+                    text="operation must be top_items or totals_by_field.",
+                )
+            ]
+        group_by = arguments.get("group_by")
+        if operation == "totals_by_field" and not group_by:
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        "totals_by_field requires group_by (a field name, e.g. "
+                        "contributor_state)."
+                    ),
+                )
+            ]
+
+        try:
+            result = await asyncio.to_thread(
+                _analyze, filing_id, schedule, operation, n, group_by
+            )
+        except Exception as e:
+            return self._filing_error(e)
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
 
     async def _search_committees(self, arguments: dict):
         """Search for committees by name."""
@@ -373,7 +706,10 @@ async def main():
     await server.run()
 
 
-if __name__ == "__main__":
-    import asyncio
-
+def cli():
+    """Console entry point (see [project.scripts] in pyproject.toml)."""
     asyncio.run(main())
+
+
+if __name__ == "__main__":
+    cli()

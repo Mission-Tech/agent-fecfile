@@ -18,29 +18,14 @@ OUTPUT_FILE="${OUTPUT_DIR}/fecfile-${VERSION}.plugin"
 echo "Building Claude Code plugin v${VERSION}..."
 echo ""
 
-# Create output directory
 mkdir -p "$OUTPUT_DIR"
 
-# Create temporary staging directory
-STAGING=$(mktemp -d)
-trap "rm -rf $STAGING" EXIT
-
-echo "Copying plugin files to staging..."
-
-# Copy plugin structure
-cp -r .claude-plugin "$STAGING/"
-cp -r skills "$STAGING/"
-cp .mcp.json "$STAGING/"
-cp README.md "$STAGING/"
-cp LICENSE "$STAGING/"
-cp CHANGELOG.md "$STAGING/"
-
-# Create plugin archive (zip with .plugin extension)
+# Archive from committed content (HEAD), never the working tree, so untracked
+# or gitignored files can't leak into the artifact.
 echo "Creating plugin archive..."
-FULL_OUTPUT_PATH="$(pwd)/$OUTPUT_FILE"
-cd "$STAGING"
-zip -r -q "$FULL_OUTPUT_PATH" .
-cd - > /dev/null
+git archive --format=zip HEAD \
+    .claude-plugin skills README.md LICENSE CHANGELOG.md \
+    -o "$OUTPUT_FILE"
 
 echo ""
 echo "✓ Built: $OUTPUT_FILE"
@@ -48,5 +33,5 @@ echo ""
 echo "To test locally:"
 echo "  claude plugin install $OUTPUT_FILE"
 echo ""
-echo "Note: This plugin requires the fecfile-mcp MCPB to be installed"
-echo "      for MCP tools. See README for installation instructions."
+echo "Note: This plugin requires the fecfile-mcp MCP server for FEC data."
+echo "      See README for installation instructions."
